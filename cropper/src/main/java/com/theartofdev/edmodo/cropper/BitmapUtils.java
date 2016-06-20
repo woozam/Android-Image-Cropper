@@ -12,6 +12,7 @@
 
 package com.theartofdev.edmodo.cropper;
 
+import android.annotation.TargetApi;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
@@ -23,6 +24,8 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.media.ExifInterface;
 import android.net.Uri;
+import android.os.Build;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Pair;
 
@@ -470,22 +473,69 @@ final class BitmapUtils {
         }
 
         // try reading real path from content resolver (gallery images)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            file = new File(getPathForV19AndUp(context, uri));
+        } else {
+            file = new File(getPathForPreV19(context, uri));
+        }
+
+        return file;
+    }
+
+    /**
+     * Handles pre V19 uri's
+     */
+    public static String getPathForPreV19(Context context, Uri contentUri) {
+        String filePath = "";
+        String[] proj = { MediaStore.Images.Media.DATA };
         Cursor cursor = null;
         try {
-            String[] proj = {MediaStore.Images.Media.DATA};
-            cursor = context.getContentResolver().query(uri, proj, null, null, null);
-            int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-            cursor.moveToFirst();
-            String realPath = cursor.getString(column_index);
-            file = new File(realPath);
-        } catch (Exception ignored) {
+            cursor = context.getContentResolver().query(contentUri, proj, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+                filePath = cursor.getString(column_index);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         } finally {
             if (cursor != null) {
                 cursor.close();
             }
         }
 
-        return file;
+        return filePath;
+    }
+
+    /**
+     * Handles V19 and up uri's
+     */
+    @TargetApi(Build.VERSION_CODES.KITKAT)
+    public static String getPathForV19AndUp(Context context, Uri contentUri) {
+        String wholeID = DocumentsContract.getDocumentId(contentUri);
+
+        String id = wholeID.split(":")[1];
+        String[] column = { MediaStore.Images.Media.DATA };
+
+        String sel = MediaStore.Images.Media._ID + "=?";
+        Cursor cursor = null;
+        String filePath = "";
+        try {
+            cursor = context.getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, column, sel, new String[]{id}, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int columnIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATA);
+                if (cursor.moveToFirst()) {
+                    filePath = cursor.getString(columnIndex);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        return filePath;
     }
 
     /**
